@@ -18,7 +18,6 @@ ATTEMPTS_PATH = os.path.join(STATE_DIR, "failed_attempts.json")   # عدّاد �
 
 TARGET_CHANNEL = "shmsannews"
 
-API_URL = "https://prince.services/api/v2"
 SERVICE_ID = "9336"
 QUANTITY = "100"
 
@@ -104,46 +103,6 @@ def pull_once():
     log(f"✨ أُضيف {len(new_links)} رابط جديد إلى الطابور.")
 
 
-# ══════════════ التنفيذ ══════════════
-def send_order(api_key, link):
-    """يرجع: 'ok' | 'fatal' (مفتاح/رصيد) | 'fail'."""
-    payload = {
-        "key": api_key,
-        "action": "add",
-        "service": SERVICE_ID,
-        "link": link,
-        "quantity": QUANTITY,
-    }
-    try:
-        response = requests.post(API_URL, data=payload, timeout=30)
-    except requests.RequestException as e:
-        log(f"⚠️ خطأ اتصال: {type(e).__name__}")
-        return "fail"
-
-    if response.status_code == 401:
-        log("❌ المفتاح مرفوض (401).")
-        return "fatal"
-    if response.status_code != 200:
-        log(f"❌ كود الحالة: {response.status_code}")
-        return "fail"
-
-    try:
-        result = response.json()
-    except ValueError:
-        log("⚠️ رد غير متوقع من السيرفر (ليس JSON).")
-        return "fail"
-
-    if "order" in result:
-        log(f"✅ تم الطلب. رقم المعاملة: {result['order']}")
-        return "ok"
-
-    error = str(result.get("error", "غير معروف"))
-    log(f"⚠️ السيرفر أعاد خطأ: {error}")
-    if "key" in error.lower() or "balance" in error.lower():
-        return "fatal"
-    return "fail"
-
-
 def pending_links(attempts):
     done = set(read_lines(DONE_PATH))
     result = []
@@ -157,7 +116,7 @@ def pending_links(attempts):
     return result
 
 
-def run_send(api_key):
+def run_browser_send(sender):
     attempts = load_attempts()
     queue = pending_links(attempts)
     if not queue:
@@ -171,13 +130,13 @@ def run_send(api_key):
             break
         tries += 1
         log(f"معالجة: {link}")
-        status = send_order(api_key, link)
+        status = sender(link)
 
         if status == "ok":
             append_lines(DONE_PATH, [link])
             return 0  # رابط ناجح واحد لكل تشغيل
         if status == "fatal":
-            log("⏹️ توقف: تحقق من المفتاح أو الرصيد.")
+            log("⏹️ توقف: تحقق من بيانات الدخول أو الرصيد.")
             return 1
 
         attempts[link] = attempts.get(link, 0) + 1
@@ -190,19 +149,23 @@ def run_send(api_key):
 
 
 def main():
-    api_key = os.environ.get("API_KEY", "").strip()
-    if not api_key:
-        log("❌ المتغير API_KEY غير موجود. أضفه في Settings > Secrets and variables > Actions.")
+    username = os.environ.get("SITE_USERNAME", "").strip()
+    password = os.environ.get("SITE_PASSWORD", "")
+    if not (username and password):
+        log("❌ أضف SITE_USERNAME وSITE_PASSWORD في Secrets and variables > Actions.")
         return 1
 
-    log(f"🚀 بدء التشغيل | القناة: @{TARGET_CHANNEL}")
+    log(f"🚀 بدء التشغيل | القناة: @{TARGET_CHANNEL} | الوضع: browser")
 
     try:
         pull_once()
     except Exception as e:
         log(f"❌ خطأ في السحب: {type(e).__name__}: {e}")
 
-    return run_send(api_key)
+    from browser_sender import BrowserSender
+
+    with BrowserSender(username, password) as sender:
+        return run_browser_send(sender)
 
 
 if __name__ == "__main__":
