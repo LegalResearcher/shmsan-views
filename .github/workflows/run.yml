@@ -2,8 +2,6 @@ name: Shmsan Views
 run-name: Other queue ${{ inputs.queue_id || github.run_id }}
 
 on:
-  schedule:
-    - cron: "*/20 * * * *"
   workflow_dispatch:
     inputs:
       link:
