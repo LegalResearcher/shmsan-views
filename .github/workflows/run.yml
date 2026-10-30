@@ -1,0 +1,119 @@
+name: Shmsan Views
+run-name: Other queue ${{ inputs.queue_id || github.run_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      link:
+        description: "Optional link for a manually requested task"
+        required: false
+        default: ""
+        type: string
+      queue_id:
+        description: "Independent queue job id"
+        required: false
+        default: ""
+        type: string
+      fencing_token:
+        description: "Independent queue fencing token"
+        required: false
+        default: ""
+        type: string
+      task_type:
+        description: "Independent queue task type"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: shmsan-views
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Sync latest state
+        run: |
+          git fetch origin main
+          git reset --hard FETCH_HEAD
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install requests playwright
+          playwright install --with-deps chromium
+
+      - name: Queue manual request
+        if: ${{ inputs.queue_id == '' }}
+        env:
+          OTHER_TASK_TYPE: manual_run
+          TARGET_LINK: ${{ inputs.link }}
+        run: python other_queue.py enqueue
+      - name: Claim independent queue job
+        id: claim
+        if: ${{ inputs.queue_id != '' }}
+        env:
+          OTHER_QUEUE_ID: ${{ inputs.queue_id }}
+          OTHER_FENCING_TOKEN: ${{ inputs.fencing_token }}
+          OTHER_TASK_TYPE: ${{ inputs.task_type }}
+          TARGET_LINK: ${{ inputs.link }}
+        run: python other_queue.py claim
+      - name: Start independent queue heartbeat
+        if: ${{ steps.claim.outputs.process == 'true' }}
+        env:
+          OTHER_QUEUE_ID: ${{ inputs.queue_id }}
+          OTHER_FENCING_TOKEN: ${{ inputs.fencing_token }}
+        run: |
+          nohup python other_queue.py heartbeat > /tmp/other-queue-heartbeat.log 2>&1 &
+          echo $! > /tmp/other-queue-heartbeat.pid
+      - name: Run script
+        id: process
+        if: ${{ steps.claim.outputs.process == 'true' }}
+        env:
+          SITE_USERNAME_1: ${{ secrets.SITE_USERNAME_1 }}
+          SITE_PASSWORD_1: ${{ secrets.SITE_PASSWORD_1 }}
+          SITE_USERNAME_2: ${{ secrets.SITE_USERNAME_2 }}
+          SITE_PASSWORD_2: ${{ secrets.SITE_PASSWORD_2 }}
+          SITE_USERNAME_3: ${{ secrets.SITE_USERNAME_3 }}
+          SITE_PASSWORD_3: ${{ secrets.SITE_PASSWORD_3 }}
+          SITE_USERNAME_4: ${{ secrets.SITE_USERNAME_4 }}
+          SITE_PASSWORD_4: ${{ secrets.SITE_PASSWORD_4 }}
+          SITE_USERNAME_5: ${{ secrets.SITE_USERNAME_5 }}
+          SITE_PASSWORD_5: ${{ secrets.SITE_PASSWORD_5 }}
+        run: python main.py
+
+      - name: Complete independent queue job
+        if: ${{ always() && steps.claim.outputs.process == 'true' }}
+        env:
+          OTHER_QUEUE_ID: ${{ inputs.queue_id }}
+          OTHER_FENCING_TOKEN: ${{ inputs.fencing_token }}
+          OTHER_SUCCESS: ${{ steps.process.outcome == 'success' }}
+        run: |
+          if [ -f /tmp/other-queue-heartbeat.pid ]; then kill "$(cat /tmp/other-queue-heartbeat.pid)" || true; fi
+          python other_queue.py complete
+      - name: Commit state
+        if: ${{ always() && steps.claim.outputs.process == 'true' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state/
+          if git diff --cached --quiet; then
+            echo "No state changes."
+            exit 0
+          fi
+          git commit -m "chore: update state"
+          git pull --rebase
+          git push
