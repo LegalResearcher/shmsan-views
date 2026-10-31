@@ -10,7 +10,8 @@ from main import (
     prepare_run_batch,
     run_browser_send,
 )
-from processing_state import load_account_history
+from processing_state import is_automation_paused, load_account_history, pause_automation
+from retry_link import process_manual_retry
 
 
 class FakeSender:
@@ -92,9 +93,23 @@ class ProcessingTests(unittest.TestCase):
         self.assertEqual(sender.calls, batch[:9])
         self.assertEqual(pending_links(batch, 1, self.state), batch[9:])
 
+    def test_manual_retry_is_blocked_while_automation_is_paused(self):
+        pause_automation(self.state, "test pause")
+        sender = FakeSender()
+        self.assertEqual(process_manual_retry(self.links[0], sender, self.state), 1)
+        self.assertEqual(sender.calls, [])
+
+    def test_normal_link_failure_does_not_pause_automation(self):
+        sender = FakeSender(["fail"])
+        self.assertEqual(process_manual_retry(self.links[0], sender, self.state), 1)
+        self.assertEqual(sender.calls, [self.links[0]])
+        self.assertFalse(is_automation_paused(self.state))
+
     def test_fatal_result_does_not_retry_link_on_same_account(self):
         sender = FakeSender(["fatal"])
-        self.assertEqual(run_browser_send(sender, self.state, 5, [self.links[0]]), 1)
+        self.assertEqual(run_browser_send(sender, self.state, 5, [self.links[0], self.links[1]]), 1)
+        self.assertEqual(sender.calls, [self.links[0]])
+        self.assertTrue(is_automation_paused(self.state))
         self.assertEqual(pending_links([self.links[0]], 5, self.state), [])
         self.assertEqual(pending_links([self.links[0]], 1, self.state), [self.links[0]])
 

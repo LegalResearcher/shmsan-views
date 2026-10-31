@@ -7,6 +7,19 @@ from account_rotation import ACCOUNT_COUNT
 
 MAX_SUCCESSES_PER_LINK = 9
 MAX_FAILURES_PER_LINK = 3
+AUTOMATION_PAUSED_FILE = "automation_paused"
+
+
+def is_automation_paused(state_dir):
+    return os.path.exists(_path(state_dir, AUTOMATION_PAUSED_FILE))
+
+
+def pause_automation(state_dir, reason="fatal account or login failure"):
+    os.makedirs(state_dir, exist_ok=True)
+    path = _path(state_dir, AUTOMATION_PAUSED_FILE)
+    if not os.path.exists(path):
+        with open(path, "w", encoding="utf-8") as file:
+            file.write(reason + "\n")
 
 
 def _path(state_dir, filename):

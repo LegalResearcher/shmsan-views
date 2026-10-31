@@ -27,6 +27,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
   id-token: write
 
 concurrency:
@@ -46,6 +47,12 @@ jobs:
           git fetch origin main
           git reset --hard FETCH_HEAD
 
+      - name: Stop if automation is paused
+        run: |
+          if [ -f state/automation_paused ]; then
+            echo "Automation is paused; manual re-enable is required."
+            exit 1
+          fi
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -102,6 +109,17 @@ jobs:
           SITE_USERNAME_9: ${{ secrets.SITE_USERNAME_9 }}
           SITE_PASSWORD_9: ${{ secrets.SITE_PASSWORD_9 }}
         run: python main.py
+      - name: Pause workflows after account failure
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f state/automation_paused ]; then
+            gh workflow disable run.yml --repo "$GITHUB_REPOSITORY" || true
+            gh workflow disable run-standalone.yml --repo "$GITHUB_REPOSITORY" || true
+            echo "Publishing workflows disabled after account/login/balance failure."
+            exit 1
+          fi
 
       - name: Complete independent queue job
         if: ${{ always() && steps.claim.outputs.process == 'true' }}
