@@ -70,6 +70,31 @@ def save_failures(state_dir, counts):
     _save_json(_path(state_dir, "failed_attempts.json"), counts)
 
 
+def load_account_history(state_dir):
+    """Return account numbers that have already attempted each link."""
+    raw = _load_json(_path(state_dir, "link_account_history.json"))
+    result = {}
+    for link, accounts in raw.items():
+        if not isinstance(link, str) or not isinstance(accounts, list):
+            continue
+        result[link] = sorted({account for account in accounts
+                               if isinstance(account, int) and not isinstance(account, bool)
+                               and 1 <= account <= 5})
+    return result
+
+
+def mark_account_handled(link, account_number, state_dir):
+    """Persist that this account already attempted this link."""
+    if (not isinstance(account_number, int) or isinstance(account_number, bool)
+            or not 1 <= account_number <= 5):
+        raise ValueError("account_number must be between 1 and 5")
+    history = load_account_history(state_dir)
+    accounts = set(history.get(link, []))
+    accounts.add(account_number)
+    history[link] = sorted(accounts)
+    _save_json(_path(state_dir, "link_account_history.json"), history)
+
+
 def is_legacy_complete(link, state_dir):
     """Treat the old completion log as authoritative without rewriting it."""
     return link in set(read_lines(_path(state_dir, "done_links.txt")))

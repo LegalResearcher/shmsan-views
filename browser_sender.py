@@ -1,6 +1,7 @@
 import os
 import random
 import re
+import sys
 
 from playwright.sync_api import sync_playwright
 
@@ -11,7 +12,9 @@ QUANTITY = "100"
 CONFIRM_TEXT = "تاكيد الطلب"
 SUCCESS_TEXT = "تم استلام طلبك بنجاح"
 # HEADLESS=1 للتشغيل بدون نافذة، والافتراضي نافذة حقيقية (على السيرفر: xvfb-run python main.py)
-HEADLESS = os.environ.get("HEADLESS", "0") == "1"
+HEADLESS = os.environ.get("HEADLESS") == "1" or (
+    sys.platform.startswith("linux") and not os.environ.get("DISPLAY")
+)
 
 
 def log(message):
