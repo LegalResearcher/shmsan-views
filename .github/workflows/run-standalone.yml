@@ -2,8 +2,6 @@ name: Shmsan Views Standalone
 run-name: Shmsan Views standalone (${{ github.run_id }})
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "*/20 * * * *"
 permissions:
   contents: write
 concurrency:
