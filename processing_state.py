@@ -3,7 +3,9 @@ import json
 import os
 import tempfile
 
-MAX_SUCCESSES_PER_LINK = 5
+from account_rotation import ACCOUNT_COUNT
+
+MAX_SUCCESSES_PER_LINK = 9
 MAX_FAILURES_PER_LINK = 3
 
 
@@ -79,15 +81,15 @@ def load_account_history(state_dir):
             continue
         result[link] = sorted({account for account in accounts
                                if isinstance(account, int) and not isinstance(account, bool)
-                               and 1 <= account <= 5})
+                               and 1 <= account <= ACCOUNT_COUNT})
     return result
 
 
 def mark_account_handled(link, account_number, state_dir):
     """Persist that this account already attempted this link."""
     if (not isinstance(account_number, int) or isinstance(account_number, bool)
-            or not 1 <= account_number <= 5):
-        raise ValueError("account_number must be between 1 and 5")
+            or not 1 <= account_number <= ACCOUNT_COUNT):
+        raise ValueError(f"account_number must be between 1 and {ACCOUNT_COUNT}")
     history = load_account_history(state_dir)
     accounts = set(history.get(link, []))
     accounts.add(account_number)

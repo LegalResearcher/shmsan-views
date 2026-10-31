@@ -42,13 +42,13 @@ class ProcessingTests(unittest.TestCase):
         self.assertEqual(batch, [self.links[2], self.links[0], self.links[1]])
         self.assertEqual(load_previous_batch(self.state), batch)
 
-    def test_legacy_queue_migration_only_keeps_first_five_incomplete_links(self):
+    def test_legacy_queue_migration_only_keeps_first_nine_incomplete_links(self):
         with open(os.path.join(self.state, "telegram_links.txt"), "w", encoding="utf-8") as file:
             file.write("\n".join(self.links) + "\n")
         with open(os.path.join(self.state, "success_counts.json"), "w", encoding="utf-8") as file:
-            json.dump({self.links[0]: 5}, file)
+            json.dump({self.links[0]: 9}, file)
         migrated = load_previous_batch(self.state)
-        self.assertEqual(migrated, self.links[1:6])
+        self.assertEqual(migrated, self.links[1:])
 
     def test_only_new_links_are_discovered_once(self):
         found = discover_new_links(self.state, [self.links[0], self.links[1]])
@@ -74,12 +74,23 @@ class ProcessingTests(unittest.TestCase):
         self.assertEqual(pending_links([self.links[0]], 3, self.state), [])
         self.assertEqual(pending_links([self.links[0]], 4, self.state), [self.links[0]])
 
-    def test_run_is_limited_to_five_requests_and_remaining_links_stay_in_batch(self):
-        batch = self.links[:7]
+    def test_scheduled_run_skips_links_at_success_or_failure_limit(self):
+        with open(os.path.join(self.state, "success_counts.json"), "w", encoding="utf-8") as file:
+            json.dump({self.links[0]: 9}, file)
+        with open(os.path.join(self.state, "failed_attempts.json"), "w", encoding="utf-8") as file:
+            json.dump({self.links[1]: 3}, file)
+
+        sender = FakeSender()
+        run_browser_send(sender, self.state, 1, self.links[:3])
+
+        self.assertEqual(sender.calls, [self.links[2]])
+
+    def test_run_is_limited_to_nine_requests_and_remaining_links_stay_in_batch(self):
+        batch = [f"https://t.me/shmsannews/{number}" for number in range(1, 12)]
         sender = FakeSender()
         run_browser_send(sender, self.state, 1, batch)
-        self.assertEqual(sender.calls, batch[:5])
-        self.assertEqual(pending_links(batch, 1, self.state), batch[5:])
+        self.assertEqual(sender.calls, batch[:9])
+        self.assertEqual(pending_links(batch, 1, self.state), batch[9:])
 
     def test_fatal_result_does_not_retry_link_on_same_account(self):
         sender = FakeSender(["fatal"])

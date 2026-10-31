@@ -12,6 +12,7 @@ from processing_state import (
     load_failures,
     load_successes,
     mark_account_handled,
+    record_result,
 )
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -19,7 +20,7 @@ STATE_DIR = os.path.join(ROOT, "state")
 os.makedirs(STATE_DIR, exist_ok=True)
 PROCESSED_PATH = os.path.join(STATE_DIR, "processed_links.txt")
 TARGET_CHANNEL = "shmsannews"
-MAX_TRIES_PER_RUN = 5
+MAX_TRIES_PER_RUN = 9
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 "
                   "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
@@ -110,8 +111,11 @@ def prepare_run_batch(new_links, state_dir=STATE_DIR):
 
 def pending_links(links, account_number, state_dir=STATE_DIR):
     history = load_account_history(state_dir)
+    successes = load_successes(state_dir)
+    failures = load_failures(state_dir)
     return [link for link in dict.fromkeys(links)
-            if account_number not in history.get(link, [])]
+            if account_number not in history.get(link, [])
+            and can_process(link, state_dir, successes, failures)]
 
 
 def run_browser_send(sender, state_dir=STATE_DIR, account_number=1, links=None):
@@ -138,9 +142,12 @@ def run_browser_send(sender, state_dir=STATE_DIR, account_number=1, links=None):
             log("⏹️ توقف: تعذر إكمال المعالجة بسبب حالة الحساب أو الرصيد.")
             return 1
         tries += 1
-        if status == "ok":
+        _, result = record_result(link, status, state_dir)
+        if result == "success":
             log(f"✅ نجحت معالجة الرابط على الحساب {account_number}.")
         else:
+            if result == "failure_limit":
+                log("🚫 تم تخطي الرابط بعد ثلاث محاولات فاشلة.")
             log(f"⚠️ فشلت محاولة الرابط على الحساب {account_number}؛ سيُترك للحسابات التالية.")
     log(f"انتهى التشغيل بعد {tries} طلبات.")
     return 0
@@ -159,7 +166,7 @@ def main():
     try:
         account_number, username, password = select_rotating_account(os.environ, STATE_DIR)
     except (OSError, ValueError) as error:
-        log(f"❌ تعذر اختيار حساب؛ تحقق من الأسرار الخمسة وحالة account_rotation.json: {error}")
+        log(f"❌ تعذر اختيار حساب؛ تحقق من الأسرار التسعة وحالة account_rotation.json: {error}")
         return 1
     log(f"🚀 بدء التشغيل | القناة: @{TARGET_CHANNEL} | الحساب رقم {account_number}")
     from browser_sender import BrowserSender

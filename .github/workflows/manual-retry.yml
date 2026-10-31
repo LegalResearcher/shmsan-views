@@ -89,6 +89,14 @@ jobs:
           SITE_PASSWORD_4: ${{ secrets.SITE_PASSWORD_4 }}
           SITE_USERNAME_5: ${{ secrets.SITE_USERNAME_5 }}
           SITE_PASSWORD_5: ${{ secrets.SITE_PASSWORD_5 }}
+          SITE_USERNAME_6: ${{ secrets.SITE_USERNAME_6 }}
+          SITE_PASSWORD_6: ${{ secrets.SITE_PASSWORD_6 }}
+          SITE_USERNAME_7: ${{ secrets.SITE_USERNAME_7 }}
+          SITE_PASSWORD_7: ${{ secrets.SITE_PASSWORD_7 }}
+          SITE_USERNAME_8: ${{ secrets.SITE_USERNAME_8 }}
+          SITE_PASSWORD_8: ${{ secrets.SITE_PASSWORD_8 }}
+          SITE_USERNAME_9: ${{ secrets.SITE_USERNAME_9 }}
+          SITE_PASSWORD_9: ${{ secrets.SITE_PASSWORD_9 }}
           TARGET_LINK: ${{ inputs.link }}
         run: python retry_link.py
       - name: Complete independent queue job
