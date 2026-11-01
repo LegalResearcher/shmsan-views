@@ -24,7 +24,7 @@ jobs:
         run: |
           pip install requests playwright
           playwright install --with-deps chromium
-      - name: Run script directly without Supabase
+      - name: Run script directly
         env:
           SITE_USERNAME_1: ${{ secrets.SITE_USERNAME_1 }}
           SITE_PASSWORD_1: ${{ secrets.SITE_PASSWORD_1 }}
