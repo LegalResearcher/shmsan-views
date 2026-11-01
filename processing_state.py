@@ -8,6 +8,15 @@ from account_rotation import ACCOUNT_COUNT
 MAX_SUCCESSES_PER_LINK = 9
 MAX_FAILURES_PER_LINK = 3
 AUTOMATION_PAUSED_FILE = "automation_paused"
+FATAL_PAUSE_RESET_FILES = (
+    "account_rotation.json",
+    "failed_attempts.json",
+    "link_account_history.json",
+    "previous_batch.json",
+    "processed_links.txt",
+    "success_counts.json",
+    "telegram_links.txt",
+)
 
 
 def is_automation_paused(state_dir):
@@ -20,6 +29,18 @@ def pause_automation(state_dir, reason="fatal account or login failure"):
     if not os.path.exists(path):
         with open(path, "w", encoding="utf-8") as file:
             file.write(reason + "\n")
+    clear_processing_state_after_fatal_pause(state_dir)
+
+
+def clear_processing_state_after_fatal_pause(state_dir):
+    """Clear shared processing state only after the fatal-pause marker exists."""
+    if not is_automation_paused(state_dir):
+        return False
+    for filename in FATAL_PAUSE_RESET_FILES:
+        path = _path(state_dir, filename)
+        if os.path.isfile(path):
+            os.remove(path)
+    return True
 
 
 def _path(state_dir, filename):

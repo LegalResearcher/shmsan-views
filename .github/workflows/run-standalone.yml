@@ -64,6 +64,15 @@ jobs:
             echo "Publishing workflows disabled after account/login/balance failure."
             exit 1
           fi
+      - name: Clear processing state after fatal pause
+        if: always()
+        run: |
+          if [ -f state/automation_paused ]; then
+            rm -f state/account_rotation.json state/failed_attempts.json \
+              state/link_account_history.json state/previous_batch.json \
+              state/processed_links.txt state/success_counts.json \
+              state/telegram_links.txt
+          fi
       - name: Commit state
         if: always()
         run: |

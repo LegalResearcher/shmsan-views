@@ -138,9 +138,6 @@ def run_browser_send(sender, state_dir=STATE_DIR, account_number=1, links=None):
         status = sender(link)
         if status == "fatal":
             pause_automation(state_dir, "fatal account/login/balance failure")
-            save_previous_batch(
-                [item for item in batch if can_process(item, state_dir)], state_dir
-            )
             log("⏹️ توقف: تعذر إكمال المعالجة بسبب حالة الحساب أو الرصيد.")
             return 1
         tries += 1

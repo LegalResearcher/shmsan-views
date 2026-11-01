@@ -130,6 +130,15 @@ jobs:
         run: |
           if [ -f /tmp/other-queue-heartbeat.pid ]; then kill "$(cat /tmp/other-queue-heartbeat.pid)" || true; fi
           python other_queue.py complete
+      - name: Clear processing state after fatal pause
+        if: always()
+        run: |
+          if [ -f state/automation_paused ]; then
+            rm -f state/account_rotation.json state/failed_attempts.json \
+              state/link_account_history.json state/previous_batch.json \
+              state/processed_links.txt state/success_counts.json \
+              state/telegram_links.txt
+          fi
       - name: Commit state
         if: ${{ always() && steps.claim.outputs.process == 'true' }}
         run: |

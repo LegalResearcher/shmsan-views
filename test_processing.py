@@ -162,13 +162,37 @@ class ProcessingTests(unittest.TestCase):
         self.assertEqual(process_manual_retry(self.links[0], sender, self.state), 1)
         self.assertEqual(sender.calls, [self.links[0]])
         self.assertFalse(is_automation_paused(self.state))
+        self.assertTrue(os.path.exists(os.path.join(self.state, "failed_attempts.json")))
+
+    def test_fatal_pause_clears_processing_state_and_preserves_pause_marker(self):
+        reset_files = (
+            "account_rotation.json", "failed_attempts.json", "link_account_history.json",
+            "previous_batch.json", "processed_links.txt", "success_counts.json",
+            "telegram_links.txt",
+        )
+        for filename in reset_files + (".gitkeep",):
+            with open(os.path.join(self.state, filename), "w", encoding="utf-8") as file:
+                file.write("state\n")
+        with open(os.path.join(self.state, "automation_paused"), "w", encoding="utf-8") as file:
+            file.write("existing pause\n")
+
+        sender = FakeSender(["fatal"])
+        self.assertEqual(run_browser_send(sender, self.state, 5, [self.links[0]]), 1)
+
+        self.assertEqual(sender.calls, [self.links[0]])
+        for filename in reset_files:
+            self.assertFalse(os.path.exists(os.path.join(self.state, filename)), filename)
+        self.assertTrue(os.path.isfile(os.path.join(self.state, "automation_paused")))
+        with open(os.path.join(self.state, "automation_paused"), encoding="utf-8") as file:
+            self.assertEqual(file.read(), "existing pause\n")
+        self.assertTrue(os.path.isfile(os.path.join(self.state, ".gitkeep")))
 
     def test_fatal_result_does_not_retry_link_on_same_account(self):
         sender = FakeSender(["fatal"])
         self.assertEqual(run_browser_send(sender, self.state, 5, [self.links[0], self.links[1]]), 1)
         self.assertEqual(sender.calls, [self.links[0]])
         self.assertTrue(is_automation_paused(self.state))
-        self.assertEqual(pending_links([self.links[0]], 5, self.state), [])
+        self.assertEqual(load_account_history(self.state), {})
         self.assertEqual(pending_links([self.links[0]], 1, self.state), [self.links[0]])
 
 
