@@ -3,44 +3,8 @@ import json
 import os
 import tempfile
 
-from account_rotation import ACCOUNT_COUNT
-
-MAX_SUCCESSES_PER_LINK = 9
+MAX_SUCCESSES_PER_LINK = 5
 MAX_FAILURES_PER_LINK = 3
-AUTOMATION_PAUSED_FILE = "automation_paused"
-FATAL_PAUSE_RESET_FILES = (
-    "account_rotation.json",
-    "failed_attempts.json",
-    "link_account_history.json",
-    "previous_batch.json",
-    "processed_links.txt",
-    "success_counts.json",
-    "telegram_links.txt",
-)
-
-
-def is_automation_paused(state_dir):
-    return os.path.exists(_path(state_dir, AUTOMATION_PAUSED_FILE))
-
-
-def pause_automation(state_dir, reason="fatal account or login failure"):
-    os.makedirs(state_dir, exist_ok=True)
-    path = _path(state_dir, AUTOMATION_PAUSED_FILE)
-    if not os.path.exists(path):
-        with open(path, "w", encoding="utf-8") as file:
-            file.write(reason + "\n")
-    clear_processing_state_after_fatal_pause(state_dir)
-
-
-def clear_processing_state_after_fatal_pause(state_dir):
-    """Clear shared processing state only after the fatal-pause marker exists."""
-    if not is_automation_paused(state_dir):
-        return False
-    for filename in FATAL_PAUSE_RESET_FILES:
-        path = _path(state_dir, filename)
-        if os.path.isfile(path):
-            os.remove(path)
-    return True
 
 
 def _path(state_dir, filename):
@@ -104,31 +68,6 @@ def load_failures(state_dir):
 
 def save_failures(state_dir, counts):
     _save_json(_path(state_dir, "failed_attempts.json"), counts)
-
-
-def load_account_history(state_dir):
-    """Return account numbers that have already attempted each link."""
-    raw = _load_json(_path(state_dir, "link_account_history.json"))
-    result = {}
-    for link, accounts in raw.items():
-        if not isinstance(link, str) or not isinstance(accounts, list):
-            continue
-        result[link] = sorted({account for account in accounts
-                               if isinstance(account, int) and not isinstance(account, bool)
-                               and 1 <= account <= ACCOUNT_COUNT})
-    return result
-
-
-def mark_account_handled(link, account_number, state_dir):
-    """Persist that this account already attempted this link."""
-    if (not isinstance(account_number, int) or isinstance(account_number, bool)
-            or not 1 <= account_number <= ACCOUNT_COUNT):
-        raise ValueError(f"account_number must be between 1 and {ACCOUNT_COUNT}")
-    history = load_account_history(state_dir)
-    accounts = set(history.get(link, []))
-    accounts.add(account_number)
-    history[link] = sorted(accounts)
-    _save_json(_path(state_dir, "link_account_history.json"), history)
 
 
 def is_legacy_complete(link, state_dir):
