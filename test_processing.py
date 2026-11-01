@@ -29,7 +29,7 @@ class ProcessingTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.state = self.temp.name
-        self.links = [f"https://t.me/shmsannews/{number}" for number in range(1, 8)]
+        self.links = [f"https://t.me/shmsannews/{number}" for number in range(2293, 2300)]
         self.sleep_patch = patch("main.time.sleep", return_value=None)
         self.sleep_patch.start()
 
@@ -56,6 +56,16 @@ class ProcessingTests(unittest.TestCase):
         found = discover_new_links(self.state, [self.links[0], self.links[1]])
         self.assertEqual(found, self.links[:2])
         self.assertEqual(discover_new_links(self.state, [self.links[0], self.links[1], self.links[2]]), [self.links[2]])
+
+    def test_start_after_post_id_excludes_anchor_and_older_links(self):
+        before = "https://t.me/shmsannews/2291"
+        anchor = "https://t.me/shmsannews/2292"
+        after = "https://t.me/shmsannews/2293"
+        self.assertEqual(discover_new_links(self.state, [before, anchor, after]), [after])
+
+        with open(os.path.join(self.state, "previous_batch.json"), "w", encoding="utf-8") as file:
+            json.dump([before, anchor, after], file)
+        self.assertEqual(prepare_run_batch([], self.state), [after])
 
     def test_account_is_not_given_same_link_twice_but_next_account_can_process_it(self):
         batch = self.links[:2]

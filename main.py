@@ -22,6 +22,7 @@ STATE_DIR = os.path.join(ROOT, "state")
 os.makedirs(STATE_DIR, exist_ok=True)
 PROCESSED_PATH = os.path.join(STATE_DIR, "processed_links.txt")
 TARGET_CHANNEL = "shmsannews"
+START_AFTER_POST_ID = 2292
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 "
                   "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
@@ -30,6 +31,11 @@ HEADERS = {
 
 def log(msg):
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
+
+
+def is_after_start_link(link):
+    match = re.fullmatch(rf"https://t\.me/{re.escape(TARGET_CHANNEL)}/(\d+)", link)
+    return bool(match and int(match.group(1)) > START_AFTER_POST_ID)
 
 
 def read_lines(path):
@@ -94,6 +100,7 @@ def fetch_links():
 def discover_new_links(state_dir=STATE_DIR, discovered=None):
     """يسجل الروابط المكتشفة حديثاً ويعيدها مرة واحدة فقط."""
     discovered = fetch_links() if discovered is None else discovered
+    discovered = [link for link in discovered if is_after_start_link(link)]
     processed_path = os.path.join(state_dir, "processed_links.txt")
     known = set(read_lines(processed_path))
     new_links = [link for link in discovered if link not in known]
@@ -105,7 +112,8 @@ def discover_new_links(state_dir=STATE_DIR, discovered=None):
 def prepare_run_batch(new_links, state_dir=STATE_DIR):
     """الجديد أولاً ثم دفعة التشغيل السابق، مع إزالة التكرار."""
     previous = load_previous_batch(state_dir)
-    batch = list(dict.fromkeys(list(new_links) + previous))
+    batch = [link for link in dict.fromkeys(list(new_links) + previous)
+             if is_after_start_link(link)]
     return batch
 
 
