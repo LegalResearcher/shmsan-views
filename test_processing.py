@@ -57,27 +57,37 @@ class ProcessingTests(unittest.TestCase):
         first = FakeSender(["ok"] * 5)
         self.assertEqual(run_browser_send(first, self.state), 0)
         self.assertEqual(len(first.calls), 5)
-        self.assertEqual(load_successes(self.state)[self.links[0]], 1)
+        self.assertEqual(first.calls, list(reversed(self.links[-5:])))
+        self.assertEqual(load_successes(self.state)[self.links[-1]], 1)
         second = FakeSender(["ok"] * 5)
         self.assertEqual(run_browser_send(second, self.state), 0)
         self.assertEqual(len(second.calls), 5)
         for _ in range(3):
             run_browser_send(FakeSender(["ok"] * 5), self.state)
-        self.assertEqual(load_successes(self.state)[self.links[0]], 5)
+        self.assertEqual(load_successes(self.state)[self.links[-1]], 5)
         remaining = FakeSender(["ok"] * 5)
         run_browser_send(remaining, self.state)
-        self.assertEqual(remaining.calls, self.links[5:])
+        self.assertEqual(remaining.calls, list(reversed(self.links[:2])))
+
+    def test_new_links_are_processed_before_queue_newest_to_oldest(self):
+        fresh_links = self.links[-3:]
+        sender = FakeSender(["ok"] * 5)
+        self.assertEqual(run_browser_send(sender, self.state, priority_links=fresh_links), 0)
+        self.assertEqual(
+            sender.calls,
+            list(reversed(fresh_links)) + list(reversed(self.links[:-3]))[:2],
+        )
 
     def test_failures_do_not_increment_success_and_three_failures_skip(self):
         run_browser_send(FakeSender(["fail"] * 5), self.state)
         self.assertEqual(load_successes(self.state), {})
-        self.assertEqual(load_failures(self.state)[self.links[0]], 1)
+        self.assertEqual(load_failures(self.state)[self.links[-1]], 1)
         run_browser_send(FakeSender(["fail"] * 5), self.state)
         run_browser_send(FakeSender(["fail"] * 5), self.state)
-        self.assertEqual(load_failures(self.state)[self.links[0]], 3)
+        self.assertEqual(load_failures(self.state)[self.links[-1]], 3)
         later = FakeSender(["ok"] * 5)
         run_browser_send(later, self.state)
-        self.assertNotIn(self.links[0], later.calls)
+        self.assertNotIn(self.links[-1], later.calls)
 
     def test_manual_retry_uses_same_counter_and_rejects_at_five(self):
         for _ in range(4):

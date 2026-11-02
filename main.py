@@ -89,13 +89,13 @@ def pull_once():
     discovered = [link for link in discovered if is_after_start_link(link)]
     if not discovered:
         log("⏹️ لم يتم العثور على منشورات في الصفحة.")
-        return
+        return []
 
     processed = set(read_lines(PROCESSED_PATH))
     new_links = [l for l in discovered if l not in processed]
     if not new_links:
         log("🔎 لا توجد منشورات جديدة.")
-        return
+        return []
 
     if first_run:
         # أول تشغيل: الأحدث فقط، وباقي ما في الصفحة يُسجَّل كمعالج دون تنفيذ
@@ -104,18 +104,25 @@ def pull_once():
         log(f"🆕 أول تشغيل، أُضيف أحدث رابط فقط: {new_links[-1]}")
         if len(new_links) > 1:
             log(f"ℹ️ تم تجاهل {len(new_links) - 1} منشور أقدم.")
-        return
+        return [new_links[-1]]
 
     # الأشغال العادية: كل الجديد بالترتيب (الأقدم أولاً)
     append_lines(LINKS_PATH, new_links)
     append_lines(PROCESSED_PATH, new_links)
     log(f"✨ أُضيف {len(new_links)} رابط جديد إلى الطابور.")
+    return new_links
 
 
-def pending_links(attempts, successes=None, state_dir=STATE_DIR):
+def pending_links(attempts, successes=None, state_dir=STATE_DIR, priority_links=None):
     successes = load_successes(state_dir) if successes is None else successes
+    links = read_lines(os.path.join(state_dir, "telegram_links.txt"))
+    queued = set(links)
+    priority = list(dict.fromkeys(reversed(priority_links or [])))
+    priority_set = set(priority)
+    ordered_links = [link for link in priority if link in queued]
+    ordered_links.extend(link for link in reversed(links) if link not in priority_set)
     result = []
-    for link in read_lines(os.path.join(state_dir, "telegram_links.txt")):
+    for link in ordered_links:
         if not is_after_start_link(link) or not can_process(link, state_dir, successes, attempts):
             continue
         if link not in result:
@@ -123,10 +130,10 @@ def pending_links(attempts, successes=None, state_dir=STATE_DIR):
     return result
 
 
-def run_browser_send(sender, state_dir=STATE_DIR):
+def run_browser_send(sender, state_dir=STATE_DIR, priority_links=None):
     attempts = load_failures(state_dir)
     successes = load_successes(state_dir)
-    queue = pending_links(attempts, successes, state_dir)
+    queue = pending_links(attempts, successes, state_dir, priority_links)
     if not queue:
         log("💤 الطابور فارغ، لا شيء للتنفيذ.")
         return 0
@@ -168,15 +175,16 @@ def main():
 
     log(f"🚀 بدء التشغيل | القناة: @{TARGET_CHANNEL} | الوضع: browser | الحساب رقم {account_number}")
 
+    new_links = []
     try:
-        pull_once()
+        new_links = pull_once()
     except Exception as e:
         log(f"❌ خطأ في السحب: {type(e).__name__}: {e}")
 
     from browser_sender import BrowserSender
 
     with BrowserSender(username, password) as sender:
-        return run_browser_send(sender)
+        return run_browser_send(sender, priority_links=new_links)
 
 
 if __name__ == "__main__":
