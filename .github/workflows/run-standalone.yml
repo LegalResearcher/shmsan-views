@@ -32,10 +32,6 @@ jobs:
           SITE_PASSWORD_2: ${{ secrets.SITE_PASSWORD_2 }}
           SITE_USERNAME_3: ${{ secrets.SITE_USERNAME_3 }}
           SITE_PASSWORD_3: ${{ secrets.SITE_PASSWORD_3 }}
-          SITE_USERNAME_4: ${{ secrets.SITE_USERNAME_4 }}
-          SITE_PASSWORD_4: ${{ secrets.SITE_PASSWORD_4 }}
-          SITE_USERNAME_5: ${{ secrets.SITE_USERNAME_5 }}
-          SITE_PASSWORD_5: ${{ secrets.SITE_PASSWORD_5 }}
         run: python main.py
       - name: Commit state
         if: always()

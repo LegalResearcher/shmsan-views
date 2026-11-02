@@ -72,7 +72,7 @@ def main():
     try:
         account_number, username, password = select_rotating_account(os.environ, STATE_DIR)
     except (OSError, ValueError) as error:
-        log(f"❌ تعذر اختيار حساب؛ تحقق من الأسرار الثلاثة وحالة account_rotation.json: {error}")
+        log(f"❌ تعذر اختيار حساب؛ تحقق من الأسرار الستة وحالة account_rotation.json: {error}")
         return 1
 
     log(f"🚀 إعادة تشغيل يدوية للرابط المحدد: {link} | الحساب رقم {account_number}")
