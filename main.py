@@ -3,9 +3,9 @@ import os
 import re
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
-from account_rotation import select_rotating_account
 from processing_state import (
     MAX_FAILURES_PER_LINK,
     MAX_SUCCESSES_PER_LINK,
@@ -25,6 +25,7 @@ PROCESSED_PATH = os.path.join(STATE_DIR, "processed_links.txt")   # روابط �
 DONE_PATH = os.path.join(STATE_DIR, "done_links.txt")             # روابط تم تنفيذها
 
 TARGET_CHANNEL = "shmsannews"
+ACCOUNT_COUNT = 3
 START_AFTER_POST_ID = 2292
 
 SERVICE_ID = "9336"
@@ -166,14 +167,94 @@ def run_browser_send(sender, state_dir=STATE_DIR, priority_links=None):
     return 0
 
 
+def load_accounts(environ):
+    accounts = []
+    missing = []
+    for number in range(1, ACCOUNT_COUNT + 1):
+        username = environ.get(f"SITE_USERNAME_{number}", "").strip()
+        password = environ.get(f"SITE_PASSWORD_{number}", "")
+        if not username:
+            missing.append(f"SITE_USERNAME_{number}")
+        if not password:
+            missing.append(f"SITE_PASSWORD_{number}")
+        accounts.append((number, username, password))
+    if missing:
+        raise ValueError("Missing required secrets: " + ", ".join(missing))
+    return accounts
+
+
+def _send_account(account, links):
+    number, username, password = account
+    results = []
+    try:
+        from browser_sender import BrowserSender
+
+        with BrowserSender(username, password) as sender:
+            for link in links:
+                log(f"الحساب {number}: معالجة {link}")
+                try:
+                    status = sender(link)
+                except Exception as error:
+                    log(f"الحساب {number}: تعذر تنفيذ الرابط ({type(error).__name__}: {error})")
+                    status = "fail"
+                results.append((link, status))
+                if status == "fatal":
+                    log(f"الحساب {number}: توقف بسبب مشكلة دخول أو رصيد.")
+                    break
+    except Exception as error:
+        log(f"الحساب {number}: تعذر تشغيل المتصفح ({type(error).__name__}: {error})")
+        results.extend((link, "fail") for link in links[len(results):])
+    return results
+
+
+def run_all_accounts(accounts, state_dir=STATE_DIR, priority_links=None):
+    """Submit the same eligible links concurrently from all three accounts."""
+    attempts = load_failures(state_dir)
+    successes = load_successes(state_dir)
+    queue = pending_links(attempts, successes, state_dir, priority_links)
+    if not queue:
+        log("💤 الطابور فارغ، لا شيء للتنفيذ.")
+        return 0
+
+    links = queue[:MAX_TRIES_PER_RUN]
+    log(f"📋 روابط مؤهلة: {len(links)}؛ سترسل الحسابات الثلاثة طلبًا لكل رابط بالتوازي.")
+    with ThreadPoolExecutor(max_workers=ACCOUNT_COUNT) as pool:
+        futures = [pool.submit(_send_account, account, links) for account in accounts]
+        account_results = [future.result() for future in futures]
+
+    had_failure = False
+    for link in links:
+        statuses = [dict(result).get(link) for result in account_results]
+        successes = load_successes(state_dir)
+        attempts = load_failures(state_dir)
+        for status in statuses:
+            if status == "fatal":
+                had_failure = True
+                continue
+            if status is None:
+                continue
+            _, result = record_result(link, status, state_dir, successes, attempts)
+            if status != "ok":
+                had_failure = True
+                if result == "failure_limit":
+                    log(f"🚫 تم تخطي الرابط نهائياً بعد {MAX_ATTEMPTS_PER_LINK} محاولات فاشلة.")
+        successes = load_successes(state_dir)
+        log(f"نتيجة الرابط {link}: {successes.get(link, 0)}/{MAX_SUCCESSES_PER_LINK} نجاحات.")
+
+    if any(len(result) < len(links) for result in account_results):
+        had_failure = True
+    log(f"انتهى التشغيل بعد {len(links)} روابط؛ حتى {len(links) * ACCOUNT_COUNT} طلبات.")
+    return 1 if had_failure else 0
+
+
 def main():
     try:
-        account_number, username, password = select_rotating_account(os.environ, STATE_DIR)
-    except (OSError, ValueError) as error:
-        log(f"❌ تعذر اختيار حساب؛ تحقق من الأسرار الستة وحالة account_rotation.json: {error}")
+        accounts = load_accounts(os.environ)
+    except ValueError as error:
+        log(f"❌ تعذر تحميل الحسابات؛ تحقق من الأسرار الستة: {error}")
         return 1
 
-    log(f"🚀 بدء التشغيل | القناة: @{TARGET_CHANNEL} | الوضع: browser | الحساب رقم {account_number}")
+    log(f"🚀 بدء التشغيل | القناة: @{TARGET_CHANNEL} | الحسابات الثلاثة بالتوازي")
 
     new_links = []
     try:
@@ -181,10 +262,7 @@ def main():
     except Exception as e:
         log(f"❌ خطأ في السحب: {type(e).__name__}: {e}")
 
-    from browser_sender import BrowserSender
-
-    with BrowserSender(username, password) as sender:
-        return run_browser_send(sender, priority_links=new_links)
+    return run_all_accounts(accounts, priority_links=new_links)
 
 
 if __name__ == "__main__":

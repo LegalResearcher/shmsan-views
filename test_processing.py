@@ -69,6 +69,25 @@ class ProcessingTests(unittest.TestCase):
         run_browser_send(remaining, self.state)
         self.assertEqual(remaining.calls, list(reversed(self.links[:2])))
 
+    def test_main_run_sends_same_eligible_links_from_all_three_accounts(self):
+        accounts = [(n, f"user-{n}", f"password-{n}") for n in range(1, 4)]
+
+        def successful_account(account, links):
+            return [(link, "ok") for link in links]
+
+        with patch.object(main, "_send_account", side_effect=successful_account) as send:
+            self.assertEqual(main.run_all_accounts(accounts, self.state), 0)
+
+        self.assertEqual(send.call_count, 3)
+        sent_batches = [call.args[1] for call in send.call_args_list]
+        self.assertEqual(sent_batches[0], sent_batches[1])
+        self.assertEqual(sent_batches[1], sent_batches[2])
+        self.assertEqual(len(sent_batches[0]), 5)
+        self.assertEqual(
+            load_successes(self.state),
+            {link: 3 for link in sent_batches[0]},
+        )
+
     def test_new_links_are_processed_before_queue_newest_to_oldest(self):
         fresh_links = self.links[-3:]
         sender = FakeSender(["ok"] * 5)
