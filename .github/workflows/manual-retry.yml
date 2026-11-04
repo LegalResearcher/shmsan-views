@@ -1,0 +1,62 @@
+name: Shmsan Views - Manual Link Retry
+run-name: Shmsan Views retry (${{ inputs.link }})
+
+on:
+  workflow_dispatch:
+    inputs:
+      link:
+        description: "رابط منشور محدد لإعادة التشغيل (100 مشاهدة)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: shmsan-views
+  cancel-in-progress: false
+
+jobs:
+  retry-one-link:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install browser dependency
+        run: |
+          pip install playwright
+          playwright install --with-deps chromium
+      - name: Retry selected link
+        env:
+          SITE_USERNAME_1: ${{ secrets.SITE_USERNAME_1 }}
+          SITE_PASSWORD_1: ${{ secrets.SITE_PASSWORD_1 }}
+          SITE_USERNAME_2: ${{ secrets.SITE_USERNAME_2 }}
+          SITE_PASSWORD_2: ${{ secrets.SITE_PASSWORD_2 }}
+          SITE_USERNAME_3: ${{ secrets.SITE_USERNAME_3 }}
+          SITE_PASSWORD_3: ${{ secrets.SITE_PASSWORD_3 }}
+          SITE_USERNAME_4: ${{ secrets.SITE_USERNAME_4 }}
+          SITE_PASSWORD_4: ${{ secrets.SITE_PASSWORD_4 }}
+          SITE_USERNAME_5: ${{ secrets.SITE_USERNAME_5 }}
+          SITE_PASSWORD_5: ${{ secrets.SITE_PASSWORD_5 }}
+          TARGET_LINK: ${{ inputs.link }}
+        run: python retry_link.py
+      - name: Commit state
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state/
+          if git diff --cached --quiet; then
+            echo "No state changes."
+            exit 0
+          fi
+          git commit -m "chore: update state after manual retry"
+          git pull --rebase origin main
+          git push origin HEAD:main
